@@ -9,5 +9,5 @@ func (app *application) routes() http.Handler {
 	mux.Handle("/", http.HandlerFunc(app.home))
 	mux.HandleFunc("/snippets/create", app.createSnippet)
 	mux.HandleFunc("/snippets/view", app.viewSnippet)
-	return securityMiddleware(mux)
+	return app.panicRecover(app.logRequests(securityMiddleware(mux)))
 }

@@ -61,3 +61,26 @@ func (app *application) newTemplateData(r *http.Request) *TemplateData {
 		Year: time.Now().Year(),
 	}
 }
+
+func (app *application) logRequests(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		app.infoLogger.Printf("%s - %s %s %s", r.RemoteAddr, r.Proto, r.Method, r.URL.RequestURI())
+		next.ServeHTTP(w, r)
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (app *application) panicRecover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				w.Header().Set("Connection", "Close")
+				app.serverError(w, fmt.Errorf("%s", err))
+				return
+			}
+
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
