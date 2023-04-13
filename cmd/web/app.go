@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -9,22 +10,32 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/alexedwards/scs/v2"
+	"github.com/go-playground/form/v4"
 	"github.com/jersonsatoru/lets-go/internal/models"
 )
 
 type application struct {
-	errorLogger   *log.Logger
-	infoLogger    *log.Logger
-	snippetModel  *models.SnippetModel
-	templateCache map[string]*template.Template
+	errorLogger    *log.Logger
+	infoLogger     *log.Logger
+	snippetModel   *models.SnippetModel
+	templateCache  map[string]*template.Template
+	formDecoder    *form.Decoder
+	sessionManager *scs.SessionManager
 }
 
-func NewApplication(infoLogger *log.Logger, errorLogger *log.Logger, snippetModel *models.SnippetModel, templateCache map[string]*template.Template) *application {
+func NewApplication(
+	infoLogger *log.Logger, errorLogger *log.Logger, snippetModel *models.SnippetModel,
+	templateCache map[string]*template.Template, formDecoder *form.Decoder,
+	sessionManager *scs.SessionManager,
+) *application {
 	return &application{
-		errorLogger:   errorLogger,
-		infoLogger:    infoLogger,
-		snippetModel:  snippetModel,
-		templateCache: templateCache,
+		errorLogger:    errorLogger,
+		infoLogger:     infoLogger,
+		snippetModel:   snippetModel,
+		templateCache:  templateCache,
+		formDecoder:    formDecoder,
+		sessionManager: sessionManager,
 	}
 }
 
@@ -83,4 +94,23 @@ func (app *application) panicRecover(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (app *application) decodePostForm(r *http.Request, dst any) error {
+	err := r.ParseForm()
+	if err != nil {
+		return err
+	}
+
+	err = app.formDecoder.Decode(&dst, r.PostForm)
+	if err != nil {
+		var invalidDecoderError *form.InvalidDecoderError
+		if errors.As(err, &invalidDecoderError) {
+			panic(err)
+		}
+
+		return err
+	}
+
+	return nil
 }

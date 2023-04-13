@@ -6,7 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/alexedwards/scs/postgresstore"
+	"github.com/alexedwards/scs/v2"
+	"github.com/go-playground/form/v4"
 	"github.com/jersonsatoru/lets-go/internal/models"
 	_ "github.com/lib/pq"
 )
@@ -34,11 +38,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	sessionManager := scs.New()
+	sessionManager.Store = postgresstore.New(db)
+	sessionManager.Lifetime = 12 * time.Hour
+
+	formDecoder := form.NewDecoder()
 	app := NewApplication(
 		infoLog,
 		errorLog,
 		snippetModel,
 		templateCache,
+		formDecoder,
+		sessionManager,
 	)
 
 	srv := http.Server{

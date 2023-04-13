@@ -9,7 +9,16 @@ import (
 	"strconv"
 
 	"github.com/jersonsatoru/lets-go/internal/models"
+	"github.com/jersonsatoru/lets-go/internal/validator"
+	"github.com/julienschmidt/httprouter"
 )
+
+type CreateSnippetForm struct {
+	Title               string `form:"title"`
+	Content             string `form:"content"`
+	Expires             int    `form:"expires"`
+	validator.Validator `form:"-"`
+}
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
@@ -30,6 +39,15 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	app.render(w, http.StatusOK, "home.tmpl", templateData)
 }
 
+func (app *application) createSnippetForm(w http.ResponseWriter, r *http.Request) {
+	templateData := app.newTemplateData(r)
+	templateData.Form = CreateSnippetForm{
+		Expires: 365,
+	}
+
+	app.render(w, http.StatusOK, "create.tmpl", templateData)
+}
+
 func (app *application) createSnippet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -37,11 +55,32 @@ func (app *application) createSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	title := "The Snail"
-	content := "Impressive work by Mark Jr"
-	expires := 7
+	var form CreateSnippetForm
+	err := app.decodePostForm(r, form)
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
 
-	id, err := app.snippetModel.Insert(title, content, expires)
+	form.CheckField(validator.NotBlank(form.Title), "title", "This field cannot be blank 11")
+	form.CheckField(validator.NotBlank(form.Content), "content", "This field cannot be blank")
+	form.CheckField(validator.MaxChars(form.Content, 100), "content", "This field cannot be greater than 100")
+	form.CheckField(validator.PermittedInt(form.Expires, 1, 7, 365), "expires", "Should be either 1, 7, 365")
+
+	if len(form.FieldErrors) > 0 {
+		templateData := app.newTemplateData(r)
+		templateData.Form = form
+
+		app.render(w, http.StatusOK, "create.tmpl", templateData)
+		return
+	}
+
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	id, err := app.snippetModel.Insert(form.Title, form.Content, form.Expires)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		app.errorLogger.Output(2, string(debug.Stack()))
@@ -49,11 +88,12 @@ func (app *application) createSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/snippets/view?id=%d", id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/snippets/view/%d", id), http.StatusSeeOther)
 }
 
 func (app *application) viewSnippet(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	params := httprouter.ParamsFromContext(r.Context())
+	id, err := strconv.Atoi(params.ByName("id"))
 	if err != nil || id < 1 {
 		app.notFound(w)
 		return

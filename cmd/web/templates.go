@@ -12,6 +12,7 @@ type TemplateData struct {
 	Snippet  *models.Snippet
 	Snippets []*models.Snippet
 	Year     int
+	Form     any
 }
 
 var functions = template.FuncMap{

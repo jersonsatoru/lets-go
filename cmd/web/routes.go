@@ -1,13 +1,21 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/julienschmidt/httprouter"
+)
 
 func (app *application) routes() http.Handler {
-	mux := http.NewServeMux()
+	mux := httprouter.New()
+	mux.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.notFound(w)
+	})
 	fileServer := http.FileServer(http.Dir("./ui/static/"))
-	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
-	mux.Handle("/", http.HandlerFunc(app.home))
-	mux.HandleFunc("/snippets/create", app.createSnippet)
-	mux.HandleFunc("/snippets/view", app.viewSnippet)
+	mux.Handler(http.MethodGet, "/static/*filepath", http.StripPrefix("/static", fileServer))
+	mux.HandlerFunc(http.MethodGet, "/snippets/create", app.createSnippetForm)
+	mux.HandlerFunc(http.MethodPost, "/snippets/create", app.createSnippet)
+	mux.HandlerFunc(http.MethodGet, "/snippets/view/:id", app.viewSnippet)
+	mux.HandlerFunc(http.MethodGet, "/", http.HandlerFunc(app.home))
 	return app.panicRecover(app.logRequests(securityMiddleware(mux)))
 }
